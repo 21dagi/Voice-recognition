@@ -1,13 +1,74 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "motion/react";
-import { CloudUpload, FileAudio, UserCheck, Cpu, Mic, Settings, Bell } from "lucide-react";
-import { Link } from "react-router-dom";
+import { CloudUpload, FileAudio, UserCheck, Cpu, Mic, Settings, Bell, CheckCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useVoiceContext } from "../context/VoiceContext";
 
 export default function RegistrationPage() {
   const [isRecording, setIsRecording] = useState(false);
+  const [localAudioBlob, setLocalAudioBlob] = useState(null);
+  
+  const { setMasterAudioBlob } = useVoiceContext();
+  const navigate = useNavigate();
 
-  const startRecording = () => setIsRecording(true);
-  const stopRecording = () => setIsRecording(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const streamRef = useRef(null);
+  const recordingTimeoutRef = useRef(null);
+
+  const startRecording = async (e) => {
+    if (e) e.preventDefault();
+    if (isRecording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setLocalAudioBlob(audioBlob);
+        if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+
+      // Max 5 seconds recording
+      recordingTimeoutRef.current = setTimeout(() => { stopRecording(); }, 5000);
+    } catch(err) {
+      console.error(err);
+      alert("Microphone access denied");
+    }
+  };
+
+  const stopRecording = (e) => {
+    if (e) e.preventDefault();
+    if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) setLocalAudioBlob(file);
+  };
+
+  const handleInitialization = () => {
+    if (!localAudioBlob) {
+      alert("Please upload or record a voice signature first.");
+      return;
+    }
+    setMasterAudioBlob(localAudioBlob);
+    navigate("/login");
+  };
 
   return (
     <div className="min-h-screen bg-background text-on-surface font-body flex flex-col selection:bg-primary/30">
@@ -59,11 +120,22 @@ export default function RegistrationPage() {
                       <CloudUpload size={14} />
                       01. Source Authentication
                     </h3>
-                    <div className="group relative bg-surface-container-low/40 border border-dashed border-outline-variant/30 rounded-2xl p-8 transition-all duration-500 hover:border-primary/40 hover:bg-surface-container-low/60 flex flex-col items-center justify-center cursor-pointer">
-                      <FileAudio className="text-on-surface-variant group-hover:text-primary transition-colors mb-4" size={36} />
-                      <p className="text-on-surface text-sm font-medium text-center">Upload Voice File</p>
-                      <p className="text-on-surface-variant text-[10px] mt-1 text-center">Drag and drop .WAV or .FLAC</p>
-                    </div>
+                    <label className="group relative bg-surface-container-low/40 border border-dashed border-outline-variant/30 rounded-2xl p-8 transition-all duration-500 hover:border-primary/40 hover:bg-surface-container-low/60 flex flex-col items-center justify-center cursor-pointer">
+                      <input type="file" accept="audio/*" className="hidden" onChange={handleFileUpload} />
+                      {localAudioBlob ? (
+                         <>
+                           <CheckCircle className="text-secondary group-hover:text-primary transition-colors mb-4" size={36} />
+                           <p className="text-on-surface text-sm font-medium text-center">Voice Captured</p>
+                           <p className="text-on-surface-variant text-[10px] mt-1 text-center text-primary/80">Ready for initialization</p>
+                         </>
+                      ) : (
+                         <>
+                           <FileAudio className="text-on-surface-variant group-hover:text-primary transition-colors mb-4" size={36} />
+                           <p className="text-on-surface text-sm font-medium text-center">Upload Voice File</p>
+                           <p className="text-on-surface-variant text-[10px] mt-1 text-center">Drag and drop .WAV or .FLAC</p>
+                         </>
+                      )}
+                    </label>
                   </div>
 
                   <div className="p-5 bg-surface-container-high/40 rounded-2xl border border-outline-variant/10">
@@ -129,7 +201,7 @@ export default function RegistrationPage() {
               </div>
 
               <div className="mt-10 flex flex-col items-center gap-5">
-                <button className="w-full max-w-sm h-14 bg-primary text-on-primary font-headline font-extrabold text-xs uppercase tracking-[0.2em] rounded-2xl transition-all hover:bg-primary-dim active:scale-[0.98] flex items-center justify-center gap-3">
+                <button onClick={handleInitialization} className="w-full max-w-sm h-14 bg-primary text-on-primary font-headline font-extrabold text-xs uppercase tracking-[0.2em] rounded-2xl transition-all hover:bg-primary-dim active:scale-[0.98] flex items-center justify-center gap-3">
                   Initializing Registration
                 </button>
                 <div className="flex items-center gap-5 text-[9px] text-on-surface-variant/50 font-bold uppercase tracking-tighter">
