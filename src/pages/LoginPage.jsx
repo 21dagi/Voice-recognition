@@ -174,6 +174,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col items-center justify-center relative overflow-hidden font-body selection:bg-primary/30">
 
+<<<<<<< HEAD
       {/* Loading Overlay */}
       {isLoading && (
         <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-black/60 backdrop-blur-md">
